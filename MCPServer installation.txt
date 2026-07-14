@@ -1,4 +1,251 @@
 ================================================================================
+OPEN WEBUI + FILE GENERATION + OPEN COMPUTER USE + SEARXNG - COMPLETE SETUP
+================================================================================
+Date: 2026-07-14
+Status: WORKING
+Time to setup: ~12 minutes (after prerequisites)
+
+================================================================================
+PREREQUISITES
+================================================================================
+- Docker installed and running
+- Git installed
+- DeepSeek API key (or any OpenAI-compatible API key)
+- ~/Desktop/file-export-output/ directory exists
+
+================================================================================
+STEP 1: CREATE OUTPUT DIRECTORY
+================================================================================
+mkdir -p ~/Desktop/file-export-output
+
+================================================================================
+STEP 2: PULL IMAGES
+================================================================================
+docker pull ghcr.io/glissemantv/owui-file-export-server:latest
+docker pull ghcr.io/glissemantv/file-gen-sse-http:latest
+docker pull ghcr.io/open-webui/open-webui:main
+docker pull searxng/searxng:latest
+
+================================================================================
+STEP 3: BUILD OPEN COMPUTER USE
+================================================================================
+cd ~/Downloads/softwares/open-computer-use
+docker compose build
+
+================================================================================
+STEP 4: RUN FILE EXPORT SERVER
+================================================================================
+docker run -d \
+  --name file-export-server \
+  --restart unless-stopped \
+  --network host \
+  --user $(id -u):$(id -g) \
+  -e FILE_EXPORT_DIR=/output \
+  -v ~/Desktop/file-export-output:/output \
+  ghcr.io/glissemantv/owui-file-export-server:latest
+
+================================================================================
+STEP 5: RUN FILE GEN SSE HTTP SERVER
+================================================================================
+docker run -d \
+  --name file-gen-sse-http \
+  --restart unless-stopped \
+  --network host \
+  --user $(id -u):$(id -g) \
+  -e FILE_EXPORT_BASE_URL=http://localhost:9003/files \
+  -e FILE_EXPORT_DIR=/output \
+  -e PERSISTENT_FILES=true \
+  -e FILES_DELAY=1 \
+  -e LOG_LEVEL=INFO \
+  -e MODE=http \
+  -v ~/Desktop/file-export-output:/output \
+  ghcr.io/glissemantv/file-gen-sse-http:latest
+
+================================================================================
+STEP 6: START OPEN COMPUTER USE SERVER
+================================================================================
+cd ~/Downloads/softwares/open-computer-use
+docker compose up -d
+
+================================================================================
+STEP 7: RUN SEARXNG (Web Search)
+================================================================================
+docker run -d \
+  --name searxng \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -e SEARXNG_BASE_URL=http://localhost:8080/ \
+  -e SEARXNG_SECRET_KEY=$(openssl rand -hex 32) \
+  searxng/searxng:latest
+
+# Wait for container to start
+sleep 5
+
+# Create proper settings file with JSON format enabled
+cat > /tmp/searxng.yml << 'EOF'
+use_default_settings: true
+
+server:
+  secret_key: "dummy"
+  image_proxy: true
+
+search:
+  formats:
+    - html
+    - json
+EOF
+
+# Apply settings
+docker cp /tmp/searxng.yml searxng:/etc/searxng/settings.yml
+docker restart searxng
+
+# Verify it works
+curl "http://localhost:8080/search?q=test&format=json"
+
+================================================================================
+STEP 8: RUN OPEN WEBUI
+================================================================================
+cd ~/open-webui-file-gen/
+
+# Create .env file
+cat > .env << 'EOF'
+OPENAI_API_KEY=YOUR_DEEPSEEK_API_KEY_HERE
+OPENAI_API_BASE_URL=https://api.deepseek.com
+WEBUI_SECRET_KEY=your-secret-key-here
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=your-password-here
+EOF
+
+docker run -d \
+  --name open-webui \
+  --restart unless-stopped \
+  -p 3000:8080 \
+  --add-host host.docker.internal:host-gateway \
+  --env-file .env \
+  -v open-webui-data:/app/backend/data \
+  -v /home/balu/Documents/gitRepos/my-agent-skills:/app/skills:ro \
+  ghcr.io/open-webui/open-webui:main
+
+================================================================================
+STEP 9: ADD TOOLS IN OPEN WEBUI
+================================================================================
+Open browser: http://localhost:3000
+Login with ADMIN_EMAIL / ADMIN_PASSWORD from STEP 8
+
+Go to Admin Settings → Tools → Add Connection (4 times):
+
+TOOL 1: FILE GENERATOR
+----------------------------------------
+Type:              MCP (Streamable HTTP)
+Name:              File Generator
+URL:               http://host.docker.internal:9004/mcp
+Auth Type:         None
+Description:       Generate files: PowerPoint (.pptx), Excel (.xlsx), Word (.docx), Text (.txt), Markdown (.md)
+
+TOOL 2: FILE EXPORT SERVER
+----------------------------------------
+Type:              MCP (Streamable HTTP)
+Name:              File Export Server
+URL:               http://host.docker.internal:9003
+Auth Type:         None
+Description:       Serves generated files for download
+
+TOOL 3: COMPUTER USE SERVER
+----------------------------------------
+Type:              MCP (Streamable HTTP)
+Name:              Computer Use Server
+URL:               http://host.docker.internal:8081/mcp
+Auth Type:         None
+Description:       Sandboxed execution for skills and code. Handles unzipping skills, executing code.
+
+================================================================================
+STEP 10: CONFIGURE SEARXNG IN OPEN WEBUI
+================================================================================
+Go to Admin Panel → Settings → Web Search:
+
+- Enable Web Search: ON
+- Web Search Engine: searxng
+- Searxng Query URL: http://host.docker.internal:8080/search?q=<query>
+- Click Save
+
+================================================================================
+STEP 11: VERIFY CONTAINERS RUNNING
+================================================================================
+docker ps
+
+Expected output:
+- open-webui                (port 3000)
+- file-export-server        (host network)
+- file-gen-sse-http         (host network)
+- computer-use-server       (port 8081)
+- searxng                   (port 8080)
+- open-computer-use-cleanup (cleanup service)
+
+================================================================================
+TEST PROMPTS
+================================================================================
+FILE GENERATION:
+- "Create an Excel file with a table of 5 countries, their capitals, and populations."
+- "Generate a Word document with 3 paragraphs about climate change."
+- "Make a PowerPoint with 5 slides about machine learning."
+
+WEB SEARCH:
+- "What is the latest news about AI?"
+- "Who won the last World Cup?"
+
+Files appear in: ~/Desktop/file-export-output/
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+1. Connection failed in Open WebUI:
+   docker exec open-webui curl -s http://host.docker.internal:9004/mcp
+   Should return: {"jsonrpc":"2.0","id":"server-error",...}
+
+2. Permission denied:
+   sudo chown -R $(id -u):$(id -g) ~/Desktop/file-export-output/
+
+3. SearXNG not returning JSON:
+   docker exec searxng cat /etc/searxng/settings.yml
+   Check if "json" is listed under search.formats
+
+4. View logs:
+   docker logs file-export-server
+   docker logs file-gen-sse-http
+   docker logs computer-use-server
+   docker logs searxng
+   docker logs open-webui
+
+5. Restart all containers:
+   docker restart open-webui file-export-server file-gen-sse-http computer-use-server searxng
+
+================================================================================
+USEFUL COMMANDS
+================================================================================
+# Stop all containers
+docker stop open-webui file-export-server file-gen-sse-http computer-use-server searxng
+
+# Remove all containers (fresh start)
+docker rm -f open-webui file-export-server file-gen-sse-http computer-use-server searxng
+
+# Check output directory
+ls -la ~/Desktop/file-export-output/
+
+# Follow logs
+docker logs -f open-webui
+
+# Test SearXNG
+curl "http://localhost:8080/search?q=test&format=json"
+
+================================================================================
+END OF SETUP
+================================================================================
+
+
+
+
+Archives:
+================================================================================
 OPEN WEBUI + FILE GENERATION + OPEN COMPUTER USE - COMPLETE SETUP
 ================================================================================
 Date: 2026-07-13
