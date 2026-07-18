@@ -2,9 +2,4 @@
 !.gitignore
 !*.skill
 !README**
-!skills/
-!skills/**/
-!skills/**/*.skill
-!skills/**/SKILL.md
-!skills/**/references/
-!skills/**/references/*
+!skills/*

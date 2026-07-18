@@ -1,9 +1,11 @@
 ---
 name: pdf-design-system
 version: 1.0.0
+creation_date: "18-07-2026"
 type: design-system
 description: "Locked PDF design system with specific typography, color palette, and layout rules"
 formats: [pdf, docx, html, qmd, txt]
+author: Balasubramaniam Namasivayam (https://github.com/nbsmani)
 ---
 
 LOCKED — Do Not Change These Values
@@ -58,6 +60,7 @@ EMBEDDED HTML TEMPLATE (Copy this block exactly when generating PDFs)
 ================================================================================
 
 [START HTML TEMPLATE]
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -137,6 +140,27 @@ body {
   line-height: 1.5;
 }
 
+/* AUTHOR & DATE FOOTER ON TITLE PAGE */
+.title-footer {
+  margin-top: 1.5cm;
+  padding-top: 0.3cm;
+  border-top: 0.5px solid #cccccc;
+  font-size: 9pt;
+  color: #666666;
+  text-align: center;
+}
+
+.title-footer .author {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.title-footer .date {
+  color: #666666;
+  font-style: italic;
+}
+
+/* Rest of CSS continues below - all existing styles unchanged */
 .section {
   margin-bottom: 0.4cm;
 }
@@ -384,10 +408,67 @@ table tr:nth-child(even) td {
 </style>
 </head>
 <body>
-<!-- CONTENT GOES HERE -->
+
+<!-- ===== TITLE PAGE ===== -->
+<div class="title-page">
+  <div class="doc-title">{DOCUMENT_TITLE}</div>
+  <div class="doc-subtitle">{DOCUMENT_SUBTITLE}</div>
+  <div class="doc-meta">{DOCUMENT_META}</div>
+  <div class="doc-abstract-label">Abstract</div>
+  <div class="doc-abstract">{DOCUMENT_ABSTRACT}</div>
+
+  <!-- AUTHOR AND DATE FOOTER -->
+  <div class="title-footer">
+    Created by: <span class="author">{AUTHOR_NAME}</span>
+    <span style="margin: 0 0.5cm;">|</span>
+    Date: <span class="date">{GENERATION_DATE}</span>
+  </div>
+</div>
+
+<!-- ===== CONTENT PAGES ===== -->
+<!-- All content goes here -->
+
 </body>
 </html>
+
 [END HTML TEMPLATE]
+
+================================================================================
+AUTHOR NAME - HOW IT WORKS
+================================================================================
+
+The author name is set in the skill metadata (YAML frontmatter) under "author".
+
+When generating a PDF, the agent MUST:
+1. Read the author name from the YAML frontmatter
+2. Replace {AUTHOR_NAME} with that value
+3. Replace {GENERATION_DATE} with the current date
+
+If the user wants to override the author for a specific document, they can specify:
+"Author: [Override Name]" in their prompt.
+
+Do NOT hard-code the author name in the HTML template. Always read it from the skill metadata.
+
+================================================================================
+INSTRUCTIONS FOR USING PLACEHOLDERS
+================================================================================
+
+When generating a PDF, replace these placeholders:
+
+  {DOCUMENT_TITLE}        -> The main title of the document
+  {DOCUMENT_SUBTITLE}     -> The subtitle/tagline
+  {DOCUMENT_META}         -> Meta info (version, document ID, etc.)
+  {DOCUMENT_ABSTRACT}     -> The abstract or summary text
+  {AUTHOR_NAME}           -> The author name from the skill metadata
+  {GENERATION_DATE}       -> Current date (YYYY-MM-DD)
+
+EXAMPLE USAGE:
+  {DOCUMENT_TITLE}        -> "Design System Test Report"
+  {DOCUMENT_SUBTITLE}     -> "Validation of PDF Design System v1.0.0"
+  {DOCUMENT_META}         -> "Version 1.0 | Document ID: DS-2026-001"
+  {DOCUMENT_ABSTRACT}     -> "This document tests the complete design system..."
+  {AUTHOR_NAME}           -> "Balasubramaniam Namasivayam" (from skill metadata)
+  {GENERATION_DATE}       -> "2026-07-18"
 
 ================================================================================
 FORMAT-SPECIFIC INSTRUCTIONS
